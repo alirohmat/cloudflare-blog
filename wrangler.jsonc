@@ -16,6 +16,21 @@
 	},
 	"observability": {
 		"enabled": true
+	},
+	/**
+	 * D1 Database Binding
+	 */
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "blog_database",
+			"database_id": "f2f25939-edb7-4840-8578-727ddd63821e"
+		}
+	],
+	/**
+	 * R2 Bucket Binding
+	 */
+	"r2_buckets": [
 		{
 			"binding": "R2_BUCKET",
 			"bucket_name": "blog-images"
