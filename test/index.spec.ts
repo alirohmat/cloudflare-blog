@@ -1,41 +1,243 @@
 import { env, createExecutionContext, waitOnExecutionContext, SELF } from 'cloudflare:test';
-import { describe, it, expect } from 'vitest';
-import worker from '../src';
+import { describe, it, expect, beforeEach } from 'vitest';
+import worker from '../src/index';
 
-describe('Hello World user worker', () => {
-	describe('request for /message', () => {
-		it('/ responds with "Hello, World!" (unit style)', async () => {
-			const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/message');
-			// Create an empty context to pass to `worker.fetch()`.
+/**
+ * Blog CMS Unit Tests
+ * Tests for routing, image handling, and core functionality
+ */
+
+describe('Blog CMS Worker', () => {
+	describe('Homepage', () => {
+		it('should return homepage HTML', async () => {
+			const request = new Request('http://example.com/');
 			const ctx = createExecutionContext();
 			const response = await worker.fetch(request, env, ctx);
-			// Wait for all `Promise`s passed to `ctx.waitUntil()` to settle before running test assertions
 			await waitOnExecutionContext(ctx);
-			expect(await response.text()).toMatchInlineSnapshot(`"Hello, World!"`);
-		});
 
-		it('responds with "Hello, World!" (integration style)', async () => {
-			const request = new Request('http://example.com/message');
-			const response = await SELF.fetch(request);
-			expect(await response.text()).toMatchInlineSnapshot(`"Hello, World!"`);
+			expect(response.status).toBe(200);
+			expect(response.headers.get('Content-Type')).toContain('text/html');
+			const body = await response.text();
+			expect(body).toContain('Artikel Terbaru');
 		});
 	});
 
-	describe('request for /random', () => {
-		it('/ responds with a random UUID (unit style)', async () => {
-			const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/random');
-			// Create an empty context to pass to `worker.fetch()`.
+	describe('Image Upload Endpoint', () => {
+		it('should reject unauthorized requests', async () => {
+			const formData = new FormData();
+			formData.append('image', new Blob(['test'], { type: 'image/png' }), 'test.png');
+
+			const request = new Request('http://example.com/admin/upload', {
+				method: 'POST',
+				body: formData,
+			});
+
 			const ctx = createExecutionContext();
 			const response = await worker.fetch(request, env, ctx);
-			// Wait for all `Promise`s passed to `ctx.waitUntil()` to settle before running test assertions
 			await waitOnExecutionContext(ctx);
-			expect(await response.text()).toMatch(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/);
+
+			expect(response.status).toBe(401);
 		});
 
-		it('responds with a random UUID (integration style)', async () => {
-			const request = new Request('http://example.com/random');
-			const response = await SELF.fetch(request);
-			expect(await response.text()).toMatch(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/);
+		it('should accept authorized image uploads', async () => {
+			const formData = new FormData();
+			const imageBlob = new Blob(['fake-image-data'], { type: 'image/png' });
+			formData.append('image', imageBlob, 'test.png');
+
+			const request = new Request('http://example.com/admin/upload', {
+				method: 'POST',
+				body: formData,
+				headers: {
+					Cookie: 'auth=true',
+				},
+			});
+
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(200);
+			const data = await response.json();
+			expect(data).toHaveProperty('success', true);
+			expect(data).toHaveProperty('url');
+			expect(data.url).toMatch(/^\/images\/.+\.png$/);
+		});
+
+		it('should reject invalid file types', async () => {
+			const formData = new FormData();
+			const invalidBlob = new Blob(['fake-pdf'], { type: 'application/pdf' });
+			formData.append('image', invalidBlob, 'test.pdf');
+
+			const request = new Request('http://example.com/admin/upload', {
+				method: 'POST',
+				body: formData,
+				headers: {
+					Cookie: 'auth=true',
+				},
+			});
+
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(400);
+			const data = await response.json();
+			expect(data).toHaveProperty('error');
+			expect(data.error).toContain('Invalid file type');
+		});
+
+		it('should reject requests without files', async () => {
+			const formData = new FormData();
+
+			const request = new Request('http://example.com/admin/upload', {
+				method: 'POST',
+				body: formData,
+				headers: {
+					Cookie: 'auth=true',
+				},
+			});
+
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(400);
+			const data = await response.json();
+			expect(data).toHaveProperty('error', 'No file uploaded');
+		});
+	});
+
+	describe('Image Serving Endpoint', () => {
+		it('should return 404 for non-existent images', async () => {
+			const request = new Request('http://example.com/images/non-existent.png');
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(404);
+		});
+
+		it('should serve existing images with correct headers', async () => {
+			// First, upload an image
+			const formData = new FormData();
+			const imageBlob = new Blob(['test-image-data'], { type: 'image/png' });
+			formData.append('image', imageBlob, 'test.png');
+
+			const uploadRequest = new Request('http://example.com/admin/upload', {
+				method: 'POST',
+				body: formData,
+				headers: { Cookie: 'auth=true' },
+			});
+
+			const uploadCtx = createExecutionContext();
+			const uploadResponse = await worker.fetch(uploadRequest, env, uploadCtx);
+			await waitOnExecutionContext(uploadCtx);
+			const uploadData = await uploadResponse.json();
+
+			// Now try to fetch the uploaded image
+			const imageRequest = new Request(`http://example.com${uploadData.url}`);
+			const imageCtx = createExecutionContext();
+			const imageResponse = await worker.fetch(imageRequest, env, imageCtx);
+			await waitOnExecutionContext(imageCtx);
+
+			expect(imageResponse.status).toBe(200);
+			expect(imageResponse.headers.get('Cache-Control')).toContain('public');
+		});
+	});
+
+	describe('Admin Routes', () => {
+		it('should redirect to admin login when not authenticated', async () => {
+			const request = new Request('http://example.com/admin/dashboard');
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(302);
+			expect(response.headers.get('Location')).toBe('/admin');
+		});
+
+		it('should allow access to admin login page', async () => {
+			const request = new Request('http://example.com/admin');
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(200);
+			const body = await response.text();
+			expect(body).toContain('Admin Login');
+		});
+
+		it('should allow access to post editor when authenticated', async () => {
+			const request = new Request('http://example.com/admin/new', {
+				headers: { Cookie: 'auth=true' },
+			});
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(200);
+			const body = await response.text();
+			expect(body).toContain('Buat Artikel Baru');
+		});
+	});
+
+	describe('SEO Routes', () => {
+		it('should serve robots.txt', async () => {
+			const request = new Request('http://example.com/robots.txt');
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get('Content-Type')).toContain('text/plain');
+			const body = await response.text();
+			expect(body).toContain('User-agent');
+		});
+
+		it('should serve sitemap.xml', async () => {
+			const request = new Request('http://example.com/sitemap.xml');
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get('Content-Type')).toContain('application/xml');
+		});
+	});
+
+	describe('Route Priority', () => {
+		it('should prioritize /images/ route over static assets', async () => {
+			// This test ensures the routing order fix is maintained
+			const request = new Request('http://example.com/images/test.png');
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			// Should be handled by handleImageServe (404 if not exists)
+			// NOT by static assets handler
+			expect(response.status).toBe(404);
+			const body = await response.text();
+			expect(body).toContain('Image not found');
+		});
+	});
+
+	describe('Post Management', () => {
+		it('should reject unauthenticated post save requests', async () => {
+			const formData = new FormData();
+			formData.append('title', 'Test Post');
+			formData.append('slug', 'test-post');
+			formData.append('content', '<p>Test content</p>');
+
+			const request = new Request('http://example.com/admin/save', {
+				method: 'POST',
+				body: formData,
+			});
+
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(401);
 		});
 	});
 });
