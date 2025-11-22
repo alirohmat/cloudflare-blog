@@ -51,6 +51,19 @@ export default {
       return handleSavePost(request, env);
     }
 
+    if (path.startsWith('/admin/edit/')) {
+      const slug = path.replace('/admin/edit/', '');
+      return handlePostEditForm(request, env, slug);
+    }
+
+    if (path === '/admin/update' && request.method === 'POST') {
+      return handleUpdatePost(request, env);
+    }
+
+    if (path === '/admin/delete' && request.method === 'POST') {
+      return handleDeletePost(request, env);
+    }
+
     if (path === '/admin/upload' && request.method === 'POST') {
       return handleImageUpload(request, env);
     }
@@ -337,9 +350,10 @@ async function handleAdminDashboard(request: Request, env: Env): Promise<Respons
                   </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">${formatDate(post.created_at)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <a href="/posts/${post.slug}" target="_blank" class="text-blue-600 hover:text-blue-900 mr-4">Lihat</a>
-                  <a href="#" class="text-red-600 hover:text-red-900">Hapus (Segera)</a>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                  <a href="/posts/${post.slug}" target="_blank" class="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200">Lihat</a>
+                  <a href="/admin/edit/${post.slug}" class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Edit</a>
+                  <button onclick="deletePost('${escapeHtml(post.slug)}', '${escapeHtml(post.title)}')" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Hapus</button>
                 </td>
               </tr>
             `
@@ -349,6 +363,24 @@ async function handleAdminDashboard(request: Request, env: Env): Promise<Respons
         </table>
       </div>
     </div>
+    <script>
+      function deletePost(slug, title) {
+        if (confirm('Yakin ingin menghapus artikel "' + title + '"?')) {
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = '/admin/delete';
+          
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'slug';
+          input.value = slug;
+          
+          form.appendChild(input);
+          document.body.appendChild(form);
+          form.submit();
+        }
+      }
+    </script>
     `
   );
   return new Response(html, { headers: { 'Content-Type': 'text/html' } });
@@ -777,6 +809,118 @@ function renderLayout(meta: { title: string; description: string }, content: str
 </body>
 </html>`;
 }
+
+async function handlePostEditForm(request: Request, env: Env, slug: string): Promise<Response> {
+  const cookie = request.headers.get('Cookie');
+  if (!cookie || !cookie.includes('auth=true')) {
+    return new Response(null, { status: 302, headers: { Location: '/admin' } });
+  }
+
+  try {
+    const post = await env.DB.prepare('SELECT * FROM posts WHERE slug = ? LIMIT 1')
+      .bind(slug)
+      .first();
+
+    if (!post) {
+      return new Response('Post not found', { status: 404 });
+    }
+
+    const html = renderLayout(
+      { title: 'Edit Artikel', description: 'Edit Artikel' },
+      `
+      <div class="max-w-4xl mx-auto px-4 py-12">
+        <h1 class="text-3xl font-bold mb-8 text-gray-900 dark:text-white">Edit Artikel</h1>
+        <form action="/admin/update" method="POST" class="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-md">
+          <input type="hidden" name="original_slug" value="${escapeHtml(post.slug)}" />
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Judul</label>
+            <input type="text" name="title" value="${escapeHtml(post.title)}" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Slug (URL)</label>
+            <input type="text" name="slug" value="${escapeHtml(post.slug)}" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Excerpt (Ringkasan)</label>
+            <textarea name="excerpt" rows="3" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none">${escapeHtml(post.excerpt || '')}</textarea>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Konten (HTML)</label>
+            <textarea name="content" rows="10" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none font-mono">${escapeHtml(post.content)}</textarea>
+          </div>
+          
+          <div class="flex items-center">
+            <input type="checkbox" name="published" id="published" ${post.published ? 'checked' : ''} class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+            <label for="published" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">Publish?</label>
+          </div>
+          
+          <div class="flex justify-end gap-4">
+            <a href="/admin/dashboard" class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition">Batal</a>
+            <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition font-semibold">Update Artikel</button>
+          </div>
+        </form>
+      </div>
+      `
+    );
+    return new Response(html, { headers: { 'Content-Type': 'text/html' } });
+  } catch (error) {
+    return new Response(`Error: ${error}`, { status: 500 });
+  }
+}
+
+async function handleUpdatePost(request: Request, env: Env): Promise<Response> {
+  const cookie = request.headers.get('Cookie');
+  if (!cookie || !cookie.includes('auth=true')) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  const formData = await request.formData();
+  const originalSlug = formData.get('original_slug') as string;
+  const title = formData.get('title') as string;
+  const slug = formData.get('slug') as string;
+  const excerpt = formData.get('excerpt') as string;
+  const content = formData.get('content') as string;
+  const published = formData.get('published') ? 1 : 0;
+
+  try {
+    await env.DB.prepare(
+      'UPDATE posts SET title = ?, slug = ?, excerpt = ?, content = ?, published = ?, updated_at = ? WHERE slug = ?'
+    )
+      .bind(title, slug, excerpt, content, published, new Date().toISOString(), originalSlug)
+      .run();
+
+    return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
+  } catch (error) {
+    return new Response(`Error updating post: ${error}`, { status: 500 });
+  }
+}
+
+async function handleDeletePost(request: Request, env: Env): Promise<Response> {
+  const cookie = request.headers.get('Cookie');
+  if (!cookie || !cookie.includes('auth=true')) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  const formData = await request.formData();
+  const slug = formData.get('slug') as string;
+
+  try {
+    await env.DB.prepare('DELETE FROM posts WHERE slug = ?')
+      .bind(slug)
+      .run();
+
+    return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
+  } catch (error) {
+    return new Response(`Error deleting post: ${error}`, { status: 500 });
+  }
+}
+
+// ========== UTILITY FUNCTIONS ==========
+
 
 function escapeHtml(text: string): string {
   const map: { [key: string]: string } = {

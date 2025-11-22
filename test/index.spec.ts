@@ -240,4 +240,137 @@ describe('Blog CMS Worker', () => {
 			expect(response.status).toBe(401);
 		});
 	});
+
+	describe('Edit Post Feature', () => {
+		it('should redirect to login when accessing edit page without auth', async () => {
+			const request = new Request('http://example.com/admin/edit/test-post');
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(302);
+			expect(response.headers.get('Location')).toBe('/admin');
+		});
+
+		it('should display edit form for authenticated users', async () => {
+			const request = new Request('http://example.com/admin/edit/test-post', {
+				headers: { Cookie: 'auth=true' },
+			});
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			// Will return 404 if post doesn't exist, 200 if it does
+			expect([200, 404]).toContain(response.status);
+		});
+
+		it('should reject unauthorized update requests', async () => {
+			const formData = new FormData();
+			formData.append('original_slug', 'test-post');
+			formData.append('title', 'Updated Title');
+			formData.append('slug', 'test-post');
+			formData.append('content', '<p>Updated content</p>');
+
+			const request = new Request('http://example.com/admin/update', {
+				method: 'POST',
+				body: formData,
+			});
+
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(401);
+		});
+
+		it('should accept authorized update requests', async () => {
+			const formData = new FormData();
+			formData.append('original_slug', 'test-post');
+			formData.append('title', 'Updated Title');
+			formData.append('slug', 'test-post');
+			formData.append('excerpt', 'Updated excerpt');
+			formData.append('content', '<p>Updated content</p>');
+			formData.append('published', 'on');
+
+			const request = new Request('http://example.com/admin/update', {
+				method: 'POST',
+				body: formData,
+				headers: { Cookie: 'auth=true' },
+			});
+
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(302);
+			expect(response.headers.get('Location')).toBe('/admin/dashboard');
+		});
+	});
+
+	describe('Delete Post Feature', () => {
+		it('should reject unauthorized delete requests', async () => {
+			const formData = new FormData();
+			formData.append('slug', 'test-post');
+
+			const request = new Request('http://example.com/admin/delete', {
+				method: 'POST',
+				body: formData,
+			});
+
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(401);
+		});
+
+		it('should accept authorized delete requests', async () => {
+			const formData = new FormData();
+			formData.append('slug', 'test-post');
+
+			const request = new Request('http://example.com/admin/delete', {
+				method: 'POST',
+				body: formData,
+				headers: { Cookie: 'auth=true' },
+			});
+
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(302);
+			expect(response.headers.get('Location')).toBe('/admin/dashboard');
+		});
+
+		it('should only accept POST method for delete', async () => {
+			const request = new Request('http://example.com/admin/delete', {
+				method: 'GET',
+				headers: { Cookie: 'auth=true' },
+			});
+
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			// Should not match the delete route (POST only)
+			expect(response.status).not.toBe(302);
+		});
+	});
+
+	describe('Admin Dashboard', () => {
+		it('should show edit and delete buttons when authenticated', async () => {
+			const request = new Request('http://example.com/admin/dashboard', {
+				headers: { Cookie: 'auth=true' },
+			});
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, env, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(200);
+			const body = await response.text();
+			expect(body).toContain('Edit');
+			expect(body).toContain('Hapus');
+			expect(body).toContain('deletePost');
+		});
+	});
 });
