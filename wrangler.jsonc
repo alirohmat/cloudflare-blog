@@ -30,7 +30,6 @@
 	],
 	/**
 	 * R2 Bucket Binding
-	 * Replace "YOUR_BUCKET_NAME_HERE" with your actual R2 Bucket Name
 	 */
 	"r2_buckets": [
 		{
