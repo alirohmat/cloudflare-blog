@@ -4,16 +4,17 @@
 
 import type { Env } from '../types';
 import { renderLayout, escapeHtml } from '../utils/render';
+import { POST_EDITOR_SCRIPT } from '../utils/scripts';
 
 export async function handlePostEditor(request: Request, env: Env): Promise<Response> {
-    const cookie = request.headers.get('Cookie');
-    if (!cookie || !cookie.includes('auth=true')) {
-        return new Response(null, { status: 302, headers: { Location: '/admin' } });
-    }
+  const cookie = request.headers.get('Cookie');
+  if (!cookie || !cookie.includes('auth=true')) {
+    return new Response(null, { status: 302, headers: { Location: '/admin' } });
+  }
 
-    const html = renderLayout(
-        { title: 'Buat Artikel Baru', description: 'Editor Artikel' },
-        `
+  const html = renderLayout(
+    { title: 'Buat Artikel Baru', description: 'Editor Artikel' },
+    `
     <div class="max-w-4xl mx-auto px-4 py-12">
       <h1 class="text-3xl font-bold mb-8 text-gray-900 dark:text-white">Buat Artikel Baru</h1>
       <form id="postForm" action="/admin/save" method="POST" class="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-md">
@@ -71,167 +72,58 @@ export async function handlePostEditor(request: Request, env: Env): Promise<Resp
     </div>
     
     <script>
-      ${getEditorScript()}
+      ${POST_EDITOR_SCRIPT}
     </script>
     `
-    );
-    return new Response(html, { headers: { 'Content-Type': 'text/html' } });
-}
-
-function getEditorScript(): string {
-    return `
-      // Auto-generate slug from title
-      const titleInput = document.getElementById('titleInput');
-      const slugInput = document.getElementById('slugInput');
-      
-      titleInput.addEventListener('input', (e) => {
-        const title = e.target.value;
-        const slug = title
-          .toLowerCase()
-          .replace(/[^a-z0-9\\\\s-]/g, '') // Remove special characters
-          .trim()
-          .replace(/\\\\s+/g, '-') // Replace spaces with hyphens
-          .replace(/-+/g, '-'); // Remove consecutive hyphens
-        slugInput.value = slug;
-      });
-      
-      // Upload cover image
-      const uploadCoverBtn = document.getElementById('uploadCoverBtn');
-      const coverImageInput = document.getElementById('coverImageInput');
-      const coverImageKey = document.getElementById('coverImageKey');
-      const coverPreview = document.getElementById('coverPreview');
-      const coverPreviewImg = document.getElementById('coverPreviewImg');
-      
-      uploadCoverBtn.addEventListener('click', async () => {
-        const file = coverImageInput.files[0];
-        if (!file) {
-          showStatus('Pilih gambar terlebih dahulu', 'error');
-          return;
-        }
-        
-        await uploadImage(file, (result) => {
-          coverImageKey.value = result.filename;
-          coverPreviewImg.src = result.url;
-          coverPreview.classList.remove('hidden');
-          showStatus('Cover image berhasil diupload!', 'success');
-        });
-      });
-      
-      // Upload and insert content image
-      const uploadContentImageBtn = document.getElementById('uploadContentImageBtn');
-      const contentImageInput = document.getElementById('contentImageInput');
-      const contentArea = document.getElementById('contentArea');
-      
-      uploadContentImageBtn.addEventListener('click', async () => {
-        const file = contentImageInput.files[0];
-        if (!file) {
-          showStatus('Pilih gambar terlebih dahulu', 'error');
-          return;
-        }
-        
-        await uploadImage(file, (result) => {
-          const imgTag = \`<img src="\${result.url}" alt="Image" class="w-full max-w-2xl rounded-lg my-4" />\`;
-          contentArea.value += '\\\\n' + imgTag + '\\\\n';
-          contentImageInput.value = ''; // Clear file input
-          showStatus('Gambar berhasil disisipkan ke konten!', 'success');
-        });
-      });
-      
-      // Upload image helper function
-      async function uploadImage(file, onSuccess) {
-        const formData = new FormData();
-        formData.append('image', file);
-        
-        showStatus('Uploading...', 'info');
-        
-        try {
-          const response = await fetch('/admin/upload', {
-            method: 'POST',
-            body: formData
-          });
-          
-          const result = await response.json();
-          
-          if (result.success) {
-            onSuccess(result);
-          } else {
-            showStatus('Error: ' + (result.error || 'Upload gagal'), 'error');
-          }
-        } catch (error) {
-          showStatus('Error: ' + error.message, 'error');
-        }
-      }
-      
-      // Show status message
-      function showStatus(message, type) {
-        const statusDiv = document.getElementById('uploadStatus');
-        statusDiv.textContent = message;
-        statusDiv.className = 'p-3 rounded-lg';
-        
-        if (type === 'success') {
-          statusDiv.className += ' bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-        } else if (type === 'error') {
-          statusDiv.className += ' bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-        } else {
-          statusDiv.className += ' bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-        }
-        
-        statusDiv.classList.remove('hidden');
-        
-        if (type !== 'info') {
-          setTimeout(() => {
-            statusDiv.classList.add('hidden');
-          }, 3000);
-        }
-      }
-  `;
+  );
+  return new Response(html, { headers: { 'Content-Type': 'text/html' } });
 }
 
 export async function handleSavePost(request: Request, env: Env): Promise<Response> {
-    const cookie = request.headers.get('Cookie');
-    if (!cookie || !cookie.includes('auth=true')) {
-        return new Response('Unauthorized', { status: 401 });
-    }
+  const cookie = request.headers.get('Cookie');
+  if (!cookie || !cookie.includes('auth=true')) {
+    return new Response('Unauthorized', { status: 401 });
+  }
 
-    const formData = await request.formData();
-    const title = formData.get('title') as string;
-    const slug = formData.get('slug') as string;
-    const excerpt = formData.get('excerpt') as string;
-    const content = formData.get('content') as string;
-    const published = formData.get('published') ? 1 : 0;
-    const coverImage = formData.get('cover_image_key') as string | null;
+  const formData = await request.formData();
+  const title = formData.get('title') as string;
+  const slug = formData.get('slug') as string;
+  const excerpt = formData.get('excerpt') as string;
+  const content = formData.get('content') as string;
+  const published = formData.get('published') ? 1 : 0;
+  const coverImage = formData.get('cover_image_key') as string | null;
 
-    try {
-        await env.DB.prepare(
-            'INSERT INTO posts (slug, title, content, excerpt, published, cover_image_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        )
-            .bind(slug, title, content, excerpt, published, coverImage || null, new Date().toISOString(), new Date().toISOString())
-            .run();
+  try {
+    await env.DB.prepare(
+      'INSERT INTO posts (slug, title, content, excerpt, published, cover_image_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    )
+      .bind(slug, title, content, excerpt, published, coverImage || null, new Date().toISOString(), new Date().toISOString())
+      .run();
 
-        return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
-    } catch (error) {
-        return new Response(`Error saving post: ${error}`, { status: 500 });
-    }
+    return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
+  } catch (error) {
+    return new Response(`Error saving post: ${error}`, { status: 500 });
+  }
 }
 
 export async function handlePostEditForm(request: Request, env: Env, slug: string): Promise<Response> {
-    const cookie = request.headers.get('Cookie');
-    if (!cookie || !cookie.includes('auth=true')) {
-        return new Response(null, { status: 302, headers: { Location: '/admin' } });
+  const cookie = request.headers.get('Cookie');
+  if (!cookie || !cookie.includes('auth=true')) {
+    return new Response(null, { status: 302, headers: { Location: '/admin' } });
+  }
+
+  try {
+    const post = await env.DB.prepare('SELECT * FROM posts WHERE slug = ? LIMIT 1')
+      .bind(slug)
+      .first();
+
+    if (!post) {
+      return new Response('Post not found', { status: 404 });
     }
 
-    try {
-        const post = await env.DB.prepare('SELECT * FROM posts WHERE slug = ? LIMIT 1')
-            .bind(slug)
-            .first();
-
-        if (!post) {
-            return new Response('Post not found', { status: 404 });
-        }
-
-        const html = renderLayout(
-            { title: 'Edit Artikel', description: 'Edit Artikel' },
-            `
+    const html = renderLayout(
+      { title: 'Edit Artikel', description: 'Edit Artikel' },
+      `
       <div class="max-w-4xl mx-auto px-4 py-12">
         <h1 class="text-3xl font-bold mb-8 text-gray-900 dark:text-white">Edit Artikel</h1>
         <form action="/admin/update" method="POST" class="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-md">
@@ -269,56 +161,56 @@ export async function handlePostEditForm(request: Request, env: Env, slug: strin
         </form>
       </div>
       `
-        );
-        return new Response(html, { headers: { 'Content-Type': 'text/html' } });
-    } catch (error) {
-        return new Response(`Error: ${error}`, { status: 500 });
-    }
+    );
+    return new Response(html, { headers: { 'Content-Type': 'text/html' } });
+  } catch (error) {
+    return new Response(`Error: ${error}`, { status: 500 });
+  }
 }
 
 export async function handleUpdatePost(request: Request, env: Env): Promise<Response> {
-    const cookie = request.headers.get('Cookie');
-    if (!cookie || !cookie.includes('auth=true')) {
-        return new Response('Unauthorized', { status: 401 });
-    }
+  const cookie = request.headers.get('Cookie');
+  if (!cookie || !cookie.includes('auth=true')) {
+    return new Response('Unauthorized', { status: 401 });
+  }
 
-    const formData = await request.formData();
-    const originalSlug = formData.get('original_slug') as string;
-    const title = formData.get('title') as string;
-    const slug = formData.get('slug') as string;
-    const excerpt = formData.get('excerpt') as string;
-    const content = formData.get('content') as string;
-    const published = formData.get('published') ? 1 : 0;
+  const formData = await request.formData();
+  const originalSlug = formData.get('original_slug') as string;
+  const title = formData.get('title') as string;
+  const slug = formData.get('slug') as string;
+  const excerpt = formData.get('excerpt') as string;
+  const content = formData.get('content') as string;
+  const published = formData.get('published') ? 1 : 0;
 
-    try {
-        await env.DB.prepare(
-            'UPDATE posts SET title = ?, slug = ?, excerpt = ?, content = ?, published = ?, updated_at = ? WHERE slug = ?'
-        )
-            .bind(title, slug, excerpt, content, published, new Date().toISOString(), originalSlug)
-            .run();
+  try {
+    await env.DB.prepare(
+      'UPDATE posts SET title = ?, slug = ?, excerpt = ?, content = ?, published = ?, updated_at = ? WHERE slug = ?'
+    )
+      .bind(title, slug, excerpt, content, published, new Date().toISOString(), originalSlug)
+      .run();
 
-        return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
-    } catch (error) {
-        return new Response(`Error updating post: ${error}`, { status: 500 });
-    }
+    return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
+  } catch (error) {
+    return new Response(`Error updating post: ${error}`, { status: 500 });
+  }
 }
 
 export async function handleDeletePost(request: Request, env: Env): Promise<Response> {
-    const cookie = request.headers.get('Cookie');
-    if (!cookie || !cookie.includes('auth=true')) {
-        return new Response('Unauthorized', { status: 401 });
-    }
+  const cookie = request.headers.get('Cookie');
+  if (!cookie || !cookie.includes('auth=true')) {
+    return new Response('Unauthorized', { status: 401 });
+  }
 
-    const formData = await request.formData();
-    const slug = formData.get('slug') as string;
+  const formData = await request.formData();
+  const slug = formData.get('slug') as string;
 
-    try {
-        await env.DB.prepare('DELETE FROM posts WHERE slug = ?')
-            .bind(slug)
-            .run();
+  try {
+    await env.DB.prepare('DELETE FROM posts WHERE slug = ?')
+      .bind(slug)
+      .run();
 
-        return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
-    } catch (error) {
-        return new Response(`Error deleting post: ${error}`, { status: 500 });
-    }
+    return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
+  } catch (error) {
+    return new Response(`Error deleting post: ${error}`, { status: 500 });
+  }
 }
