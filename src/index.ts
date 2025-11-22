@@ -51,6 +51,15 @@ export default {
       return handleSavePost(request, env);
     }
 
+    if (path === '/admin/upload' && request.method === 'POST') {
+      return handleImageUpload(request, env);
+    }
+
+    if (path.startsWith('/images/')) {
+      const filename = path.replace('/images/', '');
+      return handleImageServe(request, env, filename);
+    }
+
     if (path === '/sitemap.xml') {
       return handleSitemap(env);
     }
@@ -356,34 +365,166 @@ async function handlePostEditor(request: Request, env: Env): Promise<Response> {
     `
     <div class="max-w-4xl mx-auto px-4 py-12">
       <h1 class="text-3xl font-bold mb-8 text-gray-900 dark:text-white">Buat Artikel Baru</h1>
-      <form action="/admin/save" method="POST" class="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-md">
+      <form id="postForm" action="/admin/save" method="POST" class="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-md">
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Judul</label>
-          <input type="text" name="title" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="text" id="titleInput" name="title" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Slug (URL)</label>
-          <input type="text" name="slug" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="text" id="slugInput" name="slug" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" />
+          <p class="text-xs text-gray-500 mt-1">Otomatis di-generate dari judul. Anda bisa mengubahnya jika perlu.</p>
         </div>
+        
+        <!-- Cover Image Upload -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cover Image</label>
+          <div class="flex gap-2">
+            <input type="file" id="coverImageInput" accept="image/*" class="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" />
+            <button type="button" id="uploadCoverBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition whitespace-nowrap">Upload Cover</button>
+          </div>
+          <input type="hidden" id="coverImageKey" name="cover_image_key" />
+          <div id="coverPreview" class="mt-3 hidden">
+            <img id="coverPreviewImg" src="" alt="Cover preview" class="w-full max-w-md h-48 object-cover rounded-lg" />
+          </div>
+        </div>
+        
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Excerpt (Ringkasan)</label>
           <textarea name="excerpt" rows="3" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
         </div>
+        
+        <!-- Content with Image Upload -->
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Konten (HTML)</label>
-          <textarea name="content" rows="10" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none font-mono"></textarea>
+          <div class="mb-2">
+            <input type="file" id="contentImageInput" accept="image/*" class="inline-block mr-2 text-sm" />
+            <button type="button" id="uploadContentImageBtn" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition">📷 Upload & Sisipkan Gambar</button>
+          </div>
+          <textarea id="contentArea" name="content" rows="10" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none font-mono"></textarea>
           <p class="text-xs text-gray-500 mt-1">Gunakan tag HTML seperti &lt;p&gt;, &lt;h2&gt;, &lt;ul&gt;.</p>
         </div>
+        
         <div class="flex items-center">
           <input type="checkbox" name="published" id="published" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
           <label for="published" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">Publish sekarang?</label>
         </div>
+        
+        <div id="uploadStatus" class="hidden p-3 rounded-lg"></div>
+        
         <div class="flex justify-end gap-4">
           <a href="/admin/dashboard" class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition">Batal</a>
           <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition font-semibold">Simpan Artikel</button>
         </div>
       </form>
     </div>
+    
+    <script>
+      // Auto-generate slug from title
+      const titleInput = document.getElementById('titleInput');
+      const slugInput = document.getElementById('slugInput');
+      
+      titleInput.addEventListener('input', (e) => {
+        const title = e.target.value;
+        const slug = title
+          .toLowerCase()
+          .replace(/[^a-z0-9\\s-]/g, '') // Remove special characters
+          .trim()
+          .replace(/\\s+/g, '-') // Replace spaces with hyphens
+          .replace(/-+/g, '-'); // Remove consecutive hyphens
+        slugInput.value = slug;
+      });
+      
+      // Upload cover image
+      const uploadCoverBtn = document.getElementById('uploadCoverBtn');
+      const coverImageInput = document.getElementById('coverImageInput');
+      const coverImageKey = document.getElementById('coverImageKey');
+      const coverPreview = document.getElementById('coverPreview');
+      const coverPreviewImg = document.getElementById('coverPreviewImg');
+      
+      uploadCoverBtn.addEventListener('click', async () => {
+        const file = coverImageInput.files[0];
+        if (!file) {
+          showStatus('Pilih gambar terlebih dahulu', 'error');
+          return;
+        }
+        
+        await uploadImage(file, (result) => {
+          coverImageKey.value = result.filename;
+          coverPreviewImg.src = result.url;
+          coverPreview.classList.remove('hidden');
+          showStatus('Cover image berhasil diupload!', 'success');
+        });
+      });
+      
+      // Upload and insert content image
+      const uploadContentImageBtn = document.getElementById('uploadContentImageBtn');
+      const contentImageInput = document.getElementById('contentImageInput');
+      const contentArea = document.getElementById('contentArea');
+      
+      uploadContentImageBtn.addEventListener('click', async () => {
+        const file = contentImageInput.files[0];
+        if (!file) {
+          showStatus('Pilih gambar terlebih dahulu', 'error');
+          return;
+        }
+        
+        await uploadImage(file, (result) => {
+          const imgTag = \`<img src="\${result.url}" alt="Image" class="w-full max-w-2xl rounded-lg my-4" />\`;
+          contentArea.value += '\\n' + imgTag + '\\n';
+          contentImageInput.value = ''; // Clear file input
+          showStatus('Gambar berhasil disisipkan ke konten!', 'success');
+        });
+      });
+      
+      // Upload image helper function
+      async function uploadImage(file, onSuccess) {
+        const formData = new FormData();
+        formData.append('image', file);
+        
+        showStatus('Uploading...', 'info');
+        
+        try {
+          const response = await fetch('/admin/upload', {
+            method: 'POST',
+            body: formData
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            onSuccess(result);
+          } else {
+            showStatus('Error: ' + (result.error || 'Upload gagal'), 'error');
+          }
+        } catch (error) {
+          showStatus('Error: ' + error.message, 'error');
+        }
+      }
+      
+      // Show status message
+      function showStatus(message, type) {
+        const statusDiv = document.getElementById('uploadStatus');
+        statusDiv.textContent = message;
+        statusDiv.className = 'p-3 rounded-lg';
+        
+        if (type === 'success') {
+          statusDiv.className += ' bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+        } else if (type === 'error') {
+          statusDiv.className += ' bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+        } else {
+          statusDiv.className += ' bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+        }
+        
+        statusDiv.classList.remove('hidden');
+        
+        if (type !== 'info') {
+          setTimeout(() => {
+            statusDiv.classList.add('hidden');
+          }, 3000);
+        }
+      }
+    </script>
     `
   );
   return new Response(html, { headers: { 'Content-Type': 'text/html' } });
@@ -401,17 +542,90 @@ async function handleSavePost(request: Request, env: Env): Promise<Response> {
   const excerpt = formData.get('excerpt') as string;
   const content = formData.get('content') as string;
   const published = formData.get('published') ? 1 : 0;
+  const coverImage = formData.get('cover_image_key') as string | null;
 
   try {
     await env.DB.prepare(
-      'INSERT INTO posts (slug, title, content, excerpt, published, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO posts (slug, title, content, excerpt, published, cover_image_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     )
-      .bind(slug, title, content, excerpt, published, new Date().toISOString(), new Date().toISOString())
+      .bind(slug, title, content, excerpt, published, coverImage || null, new Date().toISOString(), new Date().toISOString())
       .run();
 
     return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
   } catch (error) {
     return new Response(`Error saving post: ${error}`, { status: 500 });
+  }
+}
+
+async function handleImageUpload(request: Request, env: Env): Promise<Response> {
+  const cookie = request.headers.get('Cookie');
+  if (!cookie || !cookie.includes('auth=true')) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  try {
+    const formData = await request.formData();
+    const file = formData.get('image') as File;
+
+    if (!file) {
+      return new Response(JSON.stringify({ error: 'No file uploaded' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      return new Response(JSON.stringify({ error: 'Invalid file type. Only JPG, PNG, GIF, and WebP are allowed.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const extension = file.name.split('.').pop();
+    const filename = `${timestamp}-${Math.random().toString(36).substring(7)}.${extension}`;
+
+    // Upload to R2
+    await env.R2_BUCKET.put(filename, file.stream(), {
+      httpMetadata: {
+        contentType: file.type,
+      },
+    });
+
+    // Return the URL
+    return new Response(JSON.stringify({
+      success: true,
+      url: `/images/${filename}`,
+      filename: filename
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: `Upload failed: ${error}` }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function handleImageServe(request: Request, env: Env, filename: string): Promise<Response> {
+  try {
+    const object = await env.R2_BUCKET.get(filename);
+
+    if (!object) {
+      return new Response('Image not found', { status: 404 });
+    }
+
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    headers.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+
+    return new Response(object.body, { headers });
+  } catch (error) {
+    return new Response('Error serving image', { status: 500 });
   }
 }
 
