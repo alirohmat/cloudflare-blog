@@ -41,78 +41,48 @@ export default {
 
     if (path === '/admin/dashboard') {
       return handleAdminDashboard(request, env);
-    }
+      if (path.startsWith('/')) {
+        return env.ASSETS.fetch(request);
+      }
 
-    if (path === '/admin/new') {
-      return handlePostEditor(request, env);
-    }
-
-    if (path === '/admin/save' && request.method === 'POST') {
-      return handleSavePost(request, env);
-    }
-
-    if (path === '/admin/upload' && request.method === 'POST') {
-      return handleImageUpload(request, env);
-    }
-
-    if (path.startsWith('/images/')) {
-      const filename = path.replace('/images/', '');
-      return handleImageServe(request, env, filename);
-    }
-
-    if (path === '/sitemap.xml') {
-      return handleSitemap(env);
-    }
-
-    if (path === '/robots.txt') {
-      return new Response('User-agent: *\nAllow: /', {
-        headers: { 'Content-Type': 'text/plain' },
-      });
-    }
-
-    // Serve static files from public/
-    if (path.startsWith('/')) {
-      return env.ASSETS.fetch(request);
-    }
-
-    return new Response('404 Not Found', { status: 404 });
-  },
-} satisfies ExportedHandler<Env>;
+      return new Response('404 Not Found', { status: 404 });
+    },
+  } satisfies ExportedHandler<Env>;
 
 // ========== HANDLERS ==========
 
 async function handleHomepage(request: Request, env: Env): Promise<Response> {
-  try {
-    const { results } = await env.DB.prepare(
-      'SELECT * FROM posts WHERE published = 1 ORDER BY created_at DESC LIMIT 10'
-    ).all();
+    try {
+      const { results } = await env.DB.prepare(
+        'SELECT * FROM posts WHERE published = 1 ORDER BY created_at DESC LIMIT 10'
+      ).all();
 
-    const posts = results || [];
+      const posts = results || [];
 
-    const html = renderLayout(
-      {
-        title: 'Beranda - Blog CMS',
-        description: 'Blog profesional dengan Cloudflare Stack',
-      },
-      `
+      const html = renderLayout(
+        {
+          title: 'Beranda - Blog CMS',
+          description: 'Blog profesional dengan Cloudflare Stack',
+        },
+        `
       <div class="max-w-6xl mx-auto px-4 py-12">
         <h1 class="text-4xl font-bold mb-8 text-gray-900 dark:text-white">Artikel Terbaru</h1>
         ${posts.length === 0
-        ? `
+          ? `
           <div class="text-center py-12">
             <p class="text-gray-600 dark:text-gray-400 text-lg">Belum ada artikel. Silakan buat artikel pertama Anda di <a href="/admin" class="text-blue-600 hover:underline">Admin Panel</a>.</p>
           </div>
         `
-        : `
+          : `
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             ${posts
-          .map(
-            (post: any) => `
+            .map(
+              (post: any) => `
               <article class="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow">
                 ${post.cover_image_key
-                ? `<img src="/images/${post.cover_image_key}" alt="${escapeHtml(post.title)}" class="w-full h-48 object-cover" />`
-                : ''
-              }
+                  ? `<img src="/images/${post.cover_image_key}" alt="${escapeHtml(post.title)}" class="w-full h-48 object-cover" />`
+                  : ''
+                }
                 <div class="p-6">
                   <h2 class="text-2xl font-semibold mb-2">
                     <a href="/posts/${post.slug}" class="text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
@@ -127,47 +97,47 @@ async function handleHomepage(request: Request, env: Env): Promise<Response> {
                 </div>
               </article>
             `
-          )
-          .join('')}
+            )
+            .join('')}
           </div>
         `
-      }
+        }
       </div>
       `
-    );
+      );
 
-    return new Response(html, {
-      headers: { 'Content-Type': 'text/html;charset=UTF-8' },
-    });
-  } catch (error) {
-    return new Response(
-      `Error: ${error instanceof Error ? error.message : 'Database tidak terhubung'}`,
-      { status: 500 }
-    );
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' },
+      });
+    } catch (error) {
+      return new Response(
+        `Error: ${error instanceof Error ? error.message : 'Database tidak terhubung'}`,
+        { status: 500 }
+      );
+    }
   }
-}
 
 async function handlePostDetail(request: Request, env: Env, slug: string): Promise<Response> {
-  try {
-    const post = await env.DB.prepare('SELECT * FROM posts WHERE slug = ? AND published = 1 LIMIT 1')
-      .bind(slug)
-      .first();
+    try {
+      const post = await env.DB.prepare('SELECT * FROM posts WHERE slug = ? AND published = 1 LIMIT 1')
+        .bind(slug)
+        .first();
 
-    if (!post) {
-      return new Response('404 - Post Not Found', { status: 404 });
-    }
+      if (!post) {
+        return new Response('404 - Post Not Found', { status: 404 });
+      }
 
-    const html = renderLayout(
-      {
-        title: `${post.title} - Blog CMS`,
-        description: post.excerpt || '',
-      },
-      `
+      const html = renderLayout(
+        {
+          title: `${post.title} - Blog CMS`,
+          description: post.excerpt || '',
+        },
+        `
       <article class="max-w-4xl mx-auto px-4 py-12">
         ${post.cover_image_key
-        ? `<img src="/images/${post.cover_image_key}" alt="${escapeHtml(post.title)}" class="w-full h-96 object-cover rounded-2xl mb-8" />`
-        : ''
-      }
+          ? `<img src="/images/${post.cover_image_key}" alt="${escapeHtml(post.title)}" class="w-full h-96 object-cover rounded-2xl mb-8" />`
+          : ''
+        }
         <h1 class="text-5xl font-bold mb-4 text-gray-900 dark:text-white">${escapeHtml(post.title)}</h1>
         <div class="text-gray-500 dark:text-gray-400 mb-8">
           📅 ${formatDate(post.created_at)}
@@ -180,49 +150,49 @@ async function handlePostDetail(request: Request, env: Env, slug: string): Promi
         </div>
       </article>
       `
-    );
+      );
 
-    return new Response(html, {
-      headers: { 'Content-Type': 'text/html;charset=UTF-8' },
-    });
-  } catch (error) {
-    return new Response(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`, {
-      status: 500,
-    });
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' },
+      });
+    } catch (error) {
+      return new Response(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`, {
+        status: 500,
+      });
+    }
   }
-}
 
 async function handleSearch(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const query = url.searchParams.get('q') || '';
+    const url = new URL(request.url);
+    const query = url.searchParams.get('q') || '';
 
-  let results: any[] = [];
+    let results: any[] = [];
 
-  if (query) {
-    const searchTerm = `%${query}%`;
-    const { results: dbResults } = await env.DB.prepare(
-      'SELECT * FROM posts WHERE published = 1 AND (title LIKE ? OR content LIKE ?) ORDER BY created_at DESC LIMIT 20'
-    )
-      .bind(searchTerm, searchTerm)
-      .all();
-    results = dbResults || [];
-  }
+    if (query) {
+      const searchTerm = `%${query}%`;
+      const { results: dbResults } = await env.DB.prepare(
+        'SELECT * FROM posts WHERE published = 1 AND (title LIKE ? OR content LIKE ?) ORDER BY created_at DESC LIMIT 20'
+      )
+        .bind(searchTerm, searchTerm)
+        .all();
+      results = dbResults || [];
+    }
 
-  const html = renderLayout(
-    {
-      title: `Pencarian: ${query} - Blog CMS`,
-      description: '',
-    },
-    `
+    const html = renderLayout(
+      {
+        title: `Pencarian: ${query} - Blog CMS`,
+        description: '',
+      },
+      `
     <div class="max-w-4xl mx-auto px-4 py-12">
       <h1 class="text-4xl font-bold mb-8 text-gray-900 dark:text-white">Hasil Pencarian: "${escapeHtml(query)}"</h1>
       ${results.length === 0
-      ? `<p class="text-gray-600 dark:text-gray-400">Tidak ada hasil ditemukan.</p>`
-      : `
+        ? `<p class="text-gray-600 dark:text-gray-400">Tidak ada hasil ditemukan.</p>`
+        : `
         <div class="space-y-6">
           ${results
-        .map(
-          (post: any) => `
+          .map(
+            (post: any) => `
             <article class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
               <h2 class="text-2xl font-semibold mb-2">
                 <a href="/posts/${post.slug}" class="text-gray-900 dark:text-white hover:text-blue-600">
@@ -232,26 +202,26 @@ async function handleSearch(request: Request, env: Env): Promise<Response> {
               <p class="text-gray-600 dark:text-gray-400">${escapeHtml(post.excerpt || '')}</p>
             </article>
           `
-        )
-        .join('')}
+          )
+          .join('')}
         </div>
       `
-    }
+      }
     </div>
     `
-  );
+    );
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html;charset=UTF-8' },
-  });
-}
+    return new Response(html, {
+      headers: { 'Content-Type': 'text/html;charset=UTF-8' },
+    });
+  }
 
 // ========== ADMIN HANDLERS ==========
 
 async function handleAdminLogin(request: Request, env: Env): Promise<Response> {
-  const html = renderLayout(
-    { title: 'Admin Login', description: 'Login ke Admin Panel' },
-    `
+    const html = renderLayout(
+      { title: 'Admin Login', description: 'Login ke Admin Panel' },
+      `
     <div class="max-w-md mx-auto px-4 py-12">
       <div class="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-md">
         <h1 class="text-2xl font-bold mb-6 text-center text-gray-900 dark:text-white">Admin Login</h1>
@@ -269,38 +239,38 @@ async function handleAdminLogin(request: Request, env: Env): Promise<Response> {
       </div>
     </div>
     `
-  );
-  return new Response(html, { headers: { 'Content-Type': 'text/html' } });
-}
+    );
+    return new Response(html, { headers: { 'Content-Type': 'text/html' } });
+  }
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {
-  const formData = await request.formData();
-  const username = formData.get('username');
-  const password = formData.get('password');
+    const formData = await request.formData();
+    const username = formData.get('username');
+    const password = formData.get('password');
 
-  // Simple Hardcoded Auth (Ganti password ini nanti!)
-  if (username === 'admin' && password === 'admin123') {
-    const headers = new Headers();
-    headers.append('Set-Cookie', `auth=true; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`);
-    headers.append('Location', '/admin/dashboard');
-    return new Response(null, { status: 302, headers });
+    // Simple Hardcoded Auth (Ganti password ini nanti!)
+    if (username === 'admin' && password === 'admin123') {
+      const headers = new Headers();
+      headers.append('Set-Cookie', `auth=true; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`);
+      headers.append('Location', '/admin/dashboard');
+      return new Response(null, { status: 302, headers });
+    }
+
+    return new Response('Login Failed', { status: 401 });
   }
-
-  return new Response('Login Failed', { status: 401 });
-}
 
 async function handleAdminDashboard(request: Request, env: Env): Promise<Response> {
-  const cookie = request.headers.get('Cookie');
-  if (!cookie || !cookie.includes('auth=true')) {
-    return new Response(null, { status: 302, headers: { Location: '/admin' } });
-  }
+    const cookie = request.headers.get('Cookie');
+    if (!cookie || !cookie.includes('auth=true')) {
+      return new Response(null, { status: 302, headers: { Location: '/admin' } });
+    }
 
-  const { results } = await env.DB.prepare('SELECT * FROM posts ORDER BY created_at DESC').all();
-  const posts = results || [];
+    const { results } = await env.DB.prepare('SELECT * FROM posts ORDER BY created_at DESC').all();
+    const posts = results || [];
 
-  const html = renderLayout(
-    { title: 'Dashboard', description: 'Admin Dashboard' },
-    `
+    const html = renderLayout(
+      { title: 'Dashboard', description: 'Admin Dashboard' },
+      `
     <div class="max-w-6xl mx-auto px-4 py-12">
       <div class="flex justify-between items-center mb-8">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
@@ -324,15 +294,15 @@ async function handleAdminDashboard(request: Request, env: Env): Promise<Respons
           </thead>
           <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
             ${posts
-      .map(
-        (post: any) => `
+        .map(
+          (post: any) => `
               <tr>
                 <td class="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white">${escapeHtml(post.title)}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${post.published
-            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-          }">
+              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+              : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+            }">
                     ${post.published ? 'Published' : 'Draft'}
                   </span>
                 </td>
@@ -343,26 +313,26 @@ async function handleAdminDashboard(request: Request, env: Env): Promise<Respons
                 </td>
               </tr>
             `
-      )
-      .join('')}
+        )
+        .join('')}
           </tbody>
         </table>
       </div>
     </div>
     `
-  );
-  return new Response(html, { headers: { 'Content-Type': 'text/html' } });
-}
-
-async function handlePostEditor(request: Request, env: Env): Promise<Response> {
-  const cookie = request.headers.get('Cookie');
-  if (!cookie || !cookie.includes('auth=true')) {
-    return new Response(null, { status: 302, headers: { Location: '/admin' } });
+    );
+    return new Response(html, { headers: { 'Content-Type': 'text/html' } });
   }
 
-  const html = renderLayout(
-    { title: 'Buat Artikel Baru', description: 'Editor Artikel' },
-    `
+async function handlePostEditor(request: Request, env: Env): Promise<Response> {
+    const cookie = request.headers.get('Cookie');
+    if (!cookie || !cookie.includes('auth=true')) {
+      return new Response(null, { status: 302, headers: { Location: '/admin' } });
+    }
+
+    const html = renderLayout(
+      { title: 'Buat Artikel Baru', description: 'Editor Artikel' },
+      `
     <div class="max-w-4xl mx-auto px-4 py-12">
       <h1 class="text-3xl font-bold mb-8 text-gray-900 dark:text-white">Buat Artikel Baru</h1>
       <form id="postForm" action="/admin/save" method="POST" class="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-md">
@@ -526,123 +496,123 @@ async function handlePostEditor(request: Request, env: Env): Promise<Response> {
       }
     </script>
     `
-  );
-  return new Response(html, { headers: { 'Content-Type': 'text/html' } });
-}
+    );
+    return new Response(html, { headers: { 'Content-Type': 'text/html' } });
+  }
 
 async function handleSavePost(request: Request, env: Env): Promise<Response> {
-  const cookie = request.headers.get('Cookie');
-  if (!cookie || !cookie.includes('auth=true')) {
-    return new Response('Unauthorized', { status: 401 });
+    const cookie = request.headers.get('Cookie');
+    if (!cookie || !cookie.includes('auth=true')) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    const formData = await request.formData();
+    const title = formData.get('title') as string;
+    const slug = formData.get('slug') as string;
+    const excerpt = formData.get('excerpt') as string;
+    const content = formData.get('content') as string;
+    const published = formData.get('published') ? 1 : 0;
+    const coverImage = formData.get('cover_image_key') as string | null;
+
+    try {
+      await env.DB.prepare(
+        'INSERT INTO posts (slug, title, content, excerpt, published, cover_image_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      )
+        .bind(slug, title, content, excerpt, published, coverImage || null, new Date().toISOString(), new Date().toISOString())
+        .run();
+
+      return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
+    } catch (error) {
+      return new Response(`Error saving post: ${error}`, { status: 500 });
+    }
   }
-
-  const formData = await request.formData();
-  const title = formData.get('title') as string;
-  const slug = formData.get('slug') as string;
-  const excerpt = formData.get('excerpt') as string;
-  const content = formData.get('content') as string;
-  const published = formData.get('published') ? 1 : 0;
-  const coverImage = formData.get('cover_image_key') as string | null;
-
-  try {
-    await env.DB.prepare(
-      'INSERT INTO posts (slug, title, content, excerpt, published, cover_image_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    )
-      .bind(slug, title, content, excerpt, published, coverImage || null, new Date().toISOString(), new Date().toISOString())
-      .run();
-
-    return new Response(null, { status: 302, headers: { Location: '/admin/dashboard' } });
-  } catch (error) {
-    return new Response(`Error saving post: ${error}`, { status: 500 });
-  }
-}
 
 async function handleImageUpload(request: Request, env: Env): Promise<Response> {
-  const cookie = request.headers.get('Cookie');
-  if (!cookie || !cookie.includes('auth=true')) {
-    return new Response('Unauthorized', { status: 401 });
-  }
+    const cookie = request.headers.get('Cookie');
+    if (!cookie || !cookie.includes('auth=true')) {
+      return new Response('Unauthorized', { status: 401 });
+    }
 
-  try {
-    const formData = await request.formData();
-    const file = formData.get('image') as File;
+    try {
+      const formData = await request.formData();
+      const file = formData.get('image') as File;
 
-    if (!file) {
-      return new Response(JSON.stringify({ error: 'No file uploaded' }), {
-        status: 400,
+      if (!file) {
+        return new Response(JSON.stringify({ error: 'No file uploaded' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        return new Response(JSON.stringify({ error: 'Invalid file type. Only JPG, PNG, GIF, and WebP are allowed.' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const extension = file.name.split('.').pop();
+      const filename = `${timestamp}-${Math.random().toString(36).substring(7)}.${extension}`;
+
+      // Upload to R2
+      await env.R2_BUCKET.put(filename, file.stream(), {
+        httpMetadata: {
+          contentType: file.type,
+        },
+      });
+
+      // Return the URL
+      return new Response(JSON.stringify({
+        success: true,
+        url: `/images/${filename}`,
+        filename: filename
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({ error: `Upload failed: ${error}` }), {
+        status: 500,
         headers: { 'Content-Type': 'application/json' }
       });
     }
-
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      return new Response(JSON.stringify({ error: 'Invalid file type. Only JPG, PNG, GIF, and WebP are allowed.' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Generate unique filename
-    const timestamp = Date.now();
-    const extension = file.name.split('.').pop();
-    const filename = `${timestamp}-${Math.random().toString(36).substring(7)}.${extension}`;
-
-    // Upload to R2
-    await env.R2_BUCKET.put(filename, file.stream(), {
-      httpMetadata: {
-        contentType: file.type,
-      },
-    });
-
-    // Return the URL
-    return new Response(JSON.stringify({
-      success: true,
-      url: `/images/${filename}`,
-      filename: filename
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: `Upload failed: ${error}` }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
   }
-}
 
 async function handleImageServe(request: Request, env: Env, filename: string): Promise<Response> {
-  try {
-    const object = await env.R2_BUCKET.get(filename);
+    try {
+      const object = await env.R2_BUCKET.get(filename);
 
-    if (!object) {
-      return new Response('Image not found', { status: 404 });
+      if (!object) {
+        return new Response('Image not found', { status: 404 });
+      }
+
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+
+      return new Response(object.body, { headers });
+    } catch (error) {
+      return new Response('Error serving image', { status: 500 });
     }
-
-    const headers = new Headers();
-    object.writeHttpMetadata(headers);
-    headers.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
-
-    return new Response(object.body, { headers });
-  } catch (error) {
-    return new Response('Error serving image', { status: 500 });
   }
-}
 
 async function handleLogout(request: Request): Promise<Response> {
-  const headers = new Headers();
-  headers.append('Set-Cookie', `auth=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
-  headers.append('Location', '/admin');
-  return new Response(null, { status: 302, headers });
-}
+    const headers = new Headers();
+    headers.append('Set-Cookie', `auth=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
+    headers.append('Location', '/admin');
+    return new Response(null, { status: 302, headers });
+  }
 
 async function handleSitemap(env: Env): Promise<Response> {
-  try {
-    const { results } = await env.DB.prepare('SELECT slug, updated_at FROM posts WHERE published = 1').all();
+    try {
+      const { results } = await env.DB.prepare('SELECT slug, updated_at FROM posts WHERE published = 1').all();
 
-    const posts = results || [];
+      const posts = results || [];
 
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://yourdomain.com/</loc>
@@ -650,25 +620,25 @@ async function handleSitemap(env: Env): Promise<Response> {
     <priority>1.0</priority>
   </url>
   ${posts
-        .map(
-          (post: any) => `
+          .map(
+            (post: any) => `
   <url>
     <loc>https://yourdomain.com/posts/${post.slug}</loc>
     <lastmod>${post.updated_at}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>`
-        )
-        .join('')}
+          )
+          .join('')}
 </urlset>`;
 
-    return new Response(xml, {
-      headers: { 'Content-Type': 'application/xml' },
-    });
-  } catch (error) {
-    return new Response('Error generating sitemap', { status: 500 });
+      return new Response(xml, {
+        headers: { 'Content-Type': 'application/xml' },
+      });
+    } catch (error) {
+      return new Response('Error generating sitemap', { status: 500 });
+    }
   }
-}
 
 // ========== LAYOUT & UTILITIES ==========
 
